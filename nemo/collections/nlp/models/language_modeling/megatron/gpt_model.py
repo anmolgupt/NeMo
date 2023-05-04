@@ -253,11 +253,11 @@ class GPTModel(MegatronModule):
         set_inference_key_value_memory=False,
         inference_max_sequence_len=None,
         checkpoint_activations_all_layers=None,
+        use_te_bf16_fprop=False,
     ):
         # input_ids: [b, s]
         # position_ids: [b, s]
         # attention_mask: [1, 1, s, s]
-
         lm_output = self.language_model(
             input_ids,
             position_ids,
@@ -268,6 +268,7 @@ class GPTModel(MegatronModule):
             set_inference_key_value_memory=set_inference_key_value_memory,
             inference_max_sequence_len=inference_max_sequence_len,
             checkpoint_activations_all_layers=checkpoint_activations_all_layers,
+            use_te_bf16_fprop=use_te_bf16_fprop,
         )
 
         if self.post_process:

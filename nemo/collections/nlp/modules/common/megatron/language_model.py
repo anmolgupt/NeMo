@@ -658,6 +658,7 @@ class TransformerLanguageModel(MegatronModule):
         set_inference_key_value_memory=False,
         inference_max_sequence_len=None,
         checkpoint_activations_all_layers=None,
+        use_te_bf16_fprop=False,
     ):
         # Embeddings.
         if self.pre_process and encoder_input is None:
@@ -699,6 +700,7 @@ class TransformerLanguageModel(MegatronModule):
                 rotary_pos_emb=(rotary_pos_emb, None, None)
                 if rotary_pos_emb is not None
                 else None,  # This assumes that this being used as a GPT/BERT model only (no cross-attention)
+                use_te_bf16_fprop=use_te_bf16_fprop,
             )
         else:
             encoder_output = enc_hidden_states.to(encoder_input.dtype)
@@ -729,6 +731,7 @@ class TransformerLanguageModel(MegatronModule):
             set_inference_key_value_memory=set_inference_key_value_memory,
             inference_max_sequence_len=inference_max_sequence_len,
             checkpoint_activations_all_layers=checkpoint_activations_all_layers,
+            use_te_bf16_fprop=use_te_bf16_fprop,
         )
 
         if self.add_pooler and self.post_process:

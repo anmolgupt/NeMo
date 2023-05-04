@@ -781,6 +781,7 @@ class AutocastTransformerLayer(TransformerLayer):
         use_emha: bool = False,
         autocast_dtype: Any = 16,
         zero_centered_gamma: bool = False,
+        use_bf16_fprop: bool = False,
     ) -> None:
         super().__init__(
             hidden_size=hidden_size,
@@ -832,6 +833,7 @@ class AutocastTransformerLayer(TransformerLayer):
         inference_params: Optional[Any] = None,
         is_first_microbatch: Optional[bool] = None,
         checkpoint_core_attention: Optional[bool] = False,
+        use_bf16_fprop: Optional[bool] = False,
     ) -> torch.Tensor:
         if self.dtype == torch.float32:
             return super().forward(
@@ -842,6 +844,7 @@ class AutocastTransformerLayer(TransformerLayer):
                 inference_params=inference_params,
                 is_first_microbatch=is_first_microbatch,
                 checkpoint_core_attention=checkpoint_core_attention,
+                use_bf16_fprop=use_bf16_fprop,
             )
         with torch.autocast(device_type="cuda", dtype=self.dtype):
             return super().forward(
@@ -852,6 +855,7 @@ class AutocastTransformerLayer(TransformerLayer):
                 inference_params=inference_params,
                 is_first_microbatch=is_first_microbatch,
                 checkpoint_core_attention=checkpoint_core_attention,
+                use_bf16_fprop=use_bf16_fprop,
             )
 
 
@@ -1002,6 +1006,7 @@ class ParallelTransformer(MegatronModule):
                 amax_history_len=self.fp8_amax_history_len,
                 amax_compute_algo=self.fp8_amax_compute_algo,
                 reduce_amax=reduce_amax,
+                override_linear_precision=(False, False, False),
             )
 
         self.is_first_microbatch = True
@@ -1188,6 +1193,7 @@ class ParallelTransformer(MegatronModule):
         self_attention_relative_position_bias,
         cross_attention_relative_position_bias,
         checkpoint_activations_all_layers,
+        use_te_bf16_fprop,
     ):
         """Forward method with activation checkpointing."""
 
@@ -1209,6 +1215,7 @@ class ParallelTransformer(MegatronModule):
                             inference_params=None,
                             is_first_microbatch=self.is_first_microbatch,
                             checkpoint_core_attention=False,
+                            use_bf16_fprop=use_te_bf16_fprop,
                         )
 
                     return hidden_states
@@ -1380,6 +1387,7 @@ class ParallelTransformer(MegatronModule):
         self_attention_relative_position_bias=None,
         cross_attention_relative_position_bias=None,
         checkpoint_activations_all_layers=None,
+        use_te_bf16_fprop=False,
     ):
         # Checks.
         if inference_max_sequence_len:
@@ -1440,6 +1448,7 @@ class ParallelTransformer(MegatronModule):
                         self_attention_relative_position_bias,
                         cross_attention_relative_position_bias,
                         checkpoint_activations_all_layers,
+                        use_te_bf16_fprop,
                     )
                 else:
                     if get_key_value:
@@ -1475,7 +1484,6 @@ class ParallelTransformer(MegatronModule):
                         if self.transformer_engine:
 
                             inference_params = None
-
                             hidden_states = layer(
                                 hidden_states,
                                 attention_mask,
@@ -1484,6 +1492,7 @@ class ParallelTransformer(MegatronModule):
                                 inference_params=inference_params,
                                 is_first_microbatch=self.is_first_microbatch,
                                 checkpoint_core_attention=checkpoint_core_attention,
+                                use_bf16_fprop=use_te_bf16_fprop,
                             )
 
                         else:

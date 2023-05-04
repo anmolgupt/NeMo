@@ -571,12 +571,18 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
                     # Intermediate pipeline stage doesn't need any inputs
                     batch = {k: None for k in ['tokens', 'position_ids', 'attention_mask', 'labels']}
 
+            if validation_step:
+                use_te_bf16_fprop = True
+            else:
+                use_te_bf16_fprop = False
+
             output_tensor = model(
                 batch['tokens'],
                 batch['position_ids'],
                 batch['attention_mask'],
                 batch['labels'],
                 checkpoint_activations_all_layers=checkpoint_activations_all_layers,
+                use_te_bf16_fprop=use_te_bf16_fprop,
             )
 
             def loss_func(output_tensor):
