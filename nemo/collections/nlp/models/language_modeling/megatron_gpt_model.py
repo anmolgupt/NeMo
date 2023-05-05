@@ -375,8 +375,9 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
         # we do this inside training_step to support pipeline parallelism
         fwd_bwd_function = self._get_fwd_bwd_function()
 
+        num_global_steps = self.trainer.global_step - self.init_global_step
         losses_reduced_per_micro_batch = fwd_bwd_function(
-            forward_step_func=self.get_forward_output_and_loss_func(),
+            forward_step_func=self.get_forward_output_and_loss_func(global_train_steps = num_global_steps),
             batch=dataloader_iter,
             model=self.model,
             forward_only=False,
@@ -533,7 +534,7 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
                     grad = word_embeddings_weight.grad
                 torch.distributed.all_reduce(grad, group=parallel_state.get_embedding_group())
 
-    def get_forward_output_and_loss_func(self, validation_step=False):
+    def get_forward_output_and_loss_func(self, validation_step=False, global_train_steps=100000):
         def fwd_output_and_loss_func(dataloader_iter, model, checkpoint_activations_all_layers=None):
             if parallel_state.get_pipeline_model_parallel_world_size() == 1:
                 batch = next(dataloader_iter)
@@ -571,11 +572,12 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
                     # Intermediate pipeline stage doesn't need any inputs
                     batch = {k: None for k in ['tokens', 'position_ids', 'attention_mask', 'labels']}
 
-            if validation_step:
+            bf16_fprop_step_limit = 5
+            if not validation_step and global_train_steps < bf16_fprop_step_limit:
                 use_te_bf16_fprop = True
             else:
                 use_te_bf16_fprop = False
-
+            logging.info(f'Use bf16 fprop: global_train_steps: {global_train_steps}, use_te_bf16_fprop: {use_te_bf16_fprop}, limit_steps: {bf16_fprop_step_limit}')
             output_tensor = model(
                 batch['tokens'],
                 batch['position_ids'],
