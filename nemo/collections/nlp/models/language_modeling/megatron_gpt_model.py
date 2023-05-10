@@ -788,6 +788,19 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
             skip_warmup=self.cfg.data.get('skip_warmup', True),
             tokenizer=self.tokenizer,
         )
+        if not (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
+            self._train_ds, self._validation_ds, self._test_ds = build_train_valid_test_datasets(
+                cfg=self.cfg,
+                trainer=self.trainer,
+                data_prefix=self.cfg.data.data_prefix,
+                data_impl='mock',
+                splits_string=self.cfg.data.splits_string,
+                train_valid_test_num_samples=train_valid_test_num_samples,
+                seq_length=self.cfg.data.seq_length,
+                seed=self.cfg.seed,
+                skip_warmup=self.cfg.data.get('skip_warmup', True),
+                tokenizer=self.tokenizer,
+            )
         if self._train_ds is not None:
             logging.info(f'Length of train dataset: {len(self._train_ds)}')
         if self._validation_ds is not None:
@@ -891,17 +904,15 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
             self.setup_transformer_engine_tp_groups()
 
     def setup_training_data(self, cfg):
-        if hasattr(self, '_train_ds') and (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
+        if hasattr(self, '_train_ds'):
             consumed_samples = self.compute_consumed_samples(0)
             logging.info(
                 f'Setting up train dataloader with len(len(self._train_ds)): {len(self._train_ds)} and consumed samples: {consumed_samples}'
             )
             self._train_dl = self.build_pretraining_data_loader(self._train_ds, consumed_samples)
-        else:
-           self._train_dl = torch.utils.data.DataLoader(deque([1]*1000), batch_size=1, shuffle=False, drop_last=True)
 
     def setup_validation_data(self, cfg):
-        if hasattr(self, '_validation_ds') and (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
+        if hasattr(self, '_validation_ds'):
             consumed_samples = 0
             logging.info(
                 f'Setting up validation dataloader with len(len(self._validation_ds)): {len(self._validation_ds)} and consumed samples: {consumed_samples}'
@@ -919,18 +930,14 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
             self._validation_dl = self.build_pretraining_data_loader(
                 self._validation_ds, consumed_samples, "validation", drop_last, pad_samples_to_global_batch_size
             )
-        else:
-            self._validation_dl = torch.utils.data.DataLoader(deque([1]*1000), batch_size=1, shuffle=False, drop_last=True)
 
     def setup_test_data(self, cfg):
-        if hasattr(self, '_test_ds') and (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
+        if hasattr(self, '_test_ds'):
             consumed_samples = 0
             logging.info(
                 f'Setting up test dataloader with len(len(self._test_ds)): {len(self._test_ds)} and consumed samples: {consumed_samples}'
             )
             self._test_dl = self.build_pretraining_data_loader(self._test_ds, consumed_samples)
-        else:
-            self._test_dl = torch.utils.data.DataLoader(deque([1]*1000), batch_size=1, shuffle=False, drop_last=True)
 
     def generate(
         self,

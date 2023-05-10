@@ -495,6 +495,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
         self._index = None
         self._bin_buffer = None
         self._delay_data_mmap = delay_data_mmap
+        self._bin_buffer_mmap = None
         self._skip_warmup = skip_warmup
 
         self._do_init(path, skip_warmup, delay_data_mmap)
@@ -524,8 +525,9 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
         self._bin_buffer = memoryview(self._bin_buffer_mmap)
 
     def __del__(self):
-        self._bin_buffer_mmap._mmap.close()
-        del self._bin_buffer_mmap
+        if self._bin_buffer_mmap is not None:
+            self._bin_buffer_mmap._mmap.close()
+            del self._bin_buffer_mmap
         del self._index
 
     def __len__(self):
