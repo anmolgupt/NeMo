@@ -677,20 +677,21 @@ def _build_index_mappings(
         torch.distributed.get_world_size()
         // torch.distributed.get_world_size(group=parallel_state.get_tensor_model_parallel_group())
     )
-
     # Load mappings.
-    start_time = time.time()
-    logging.info(' > loading doc-idx mapping from {}'.format(doc_idx_filename))
-    doc_idx = np.load(doc_idx_filename, allow_pickle=True, mmap_mode='r')
-    logging.info(' > loading sample-idx mapping from {}'.format(sample_idx_filename))
-    sample_idx = np.load(sample_idx_filename, allow_pickle=True, mmap_mode='r')
-    logging.info(' > loading shuffle-idx mapping from {}'.format(shuffle_idx_filename))
-    shuffle_idx = np.load(shuffle_idx_filename, allow_pickle=True, mmap_mode='r')
-    logging.info('    loaded indexed file in {:3.3f} seconds'.format(time.time() - start_time))
-    logging.info('    total number of samples: {}'.format(sample_idx.shape[0]))
-    logging.info('    total number of epochs: {}'.format(num_epochs))
-
-    return doc_idx, sample_idx, shuffle_idx
+    if parallel_state.get_pipeline_model_parallel_world_size() == 1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage():
+        start_time = time.time()
+        logging.info(' > loading doc-idx mapping from {}'.format(doc_idx_filename))
+        doc_idx = np.load(doc_idx_filename, allow_pickle=True, mmap_mode='r')
+        logging.info(' > loading sample-idx mapping from {}'.format(sample_idx_filename))
+        sample_idx = np.load(sample_idx_filename, allow_pickle=True, mmap_mode='r')
+        logging.info(' > loading shuffle-idx mapping from {}'.format(shuffle_idx_filename))
+        shuffle_idx = np.load(shuffle_idx_filename, allow_pickle=True, mmap_mode='r')
+        logging.info('    loaded indexed file in {:3.3f} seconds'.format(time.time() - start_time))
+        logging.info('    total number of samples: {}'.format(sample_idx.shape[0]))
+        logging.info('    total number of epochs: {}'.format(num_epochs))
+        return doc_idx, sample_idx, shuffle_idx
+    else:
+        return None, np.array([[1, 2], [3, 4]], np.int32), None
 
 
 def _num_tokens(documents, sizes):

@@ -21,7 +21,7 @@ from omegaconf.dictconfig import DictConfig
 from pytorch_lightning.accelerators import CPUAccelerator
 from pytorch_lightning.plugins.precision.native_amp import NativeMixedPrecisionPlugin
 from pytorch_lightning.trainer.trainer import Trainer
-
+from collections import deque
 from nemo.collections.nlp.data.language_modeling.megatron.data_samplers import (
     MegatronPretrainingRandomSampler,
     MegatronPretrainingSampler,
@@ -891,15 +891,17 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
             self.setup_transformer_engine_tp_groups()
 
     def setup_training_data(self, cfg):
-        if hasattr(self, '_train_ds'):
+        if hasattr(self, '_train_ds') and (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
             consumed_samples = self.compute_consumed_samples(0)
             logging.info(
                 f'Setting up train dataloader with len(len(self._train_ds)): {len(self._train_ds)} and consumed samples: {consumed_samples}'
             )
             self._train_dl = self.build_pretraining_data_loader(self._train_ds, consumed_samples)
+        else:
+           self._train_dl = torch.utils.data.DataLoader(deque([1]*1000), batch_size=1, shuffle=False, drop_last=True)
 
     def setup_validation_data(self, cfg):
-        if hasattr(self, '_validation_ds'):
+        if hasattr(self, '_validation_ds') and (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
             consumed_samples = 0
             logging.info(
                 f'Setting up validation dataloader with len(len(self._validation_ds)): {len(self._validation_ds)} and consumed samples: {consumed_samples}'
@@ -917,14 +919,18 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
             self._validation_dl = self.build_pretraining_data_loader(
                 self._validation_ds, consumed_samples, "validation", drop_last, pad_samples_to_global_batch_size
             )
+        else:
+            self._validation_dl = torch.utils.data.DataLoader(deque([1]*1000), batch_size=1, shuffle=False, drop_last=True)
 
     def setup_test_data(self, cfg):
-        if hasattr(self, '_test_ds'):
+        if hasattr(self, '_test_ds') and (parallel_state.get_pipeline_model_parallel_world_size()==1 or parallel_state.is_pipeline_first_stage() or parallel_state.is_pipeline_last_stage()):
             consumed_samples = 0
             logging.info(
                 f'Setting up test dataloader with len(len(self._test_ds)): {len(self._test_ds)} and consumed samples: {consumed_samples}'
             )
             self._test_dl = self.build_pretraining_data_loader(self._test_ds, consumed_samples)
+        else:
+            self._test_dl = torch.utils.data.DataLoader(deque([1]*1000), batch_size=1, shuffle=False, drop_last=True)
 
     def generate(
         self,
