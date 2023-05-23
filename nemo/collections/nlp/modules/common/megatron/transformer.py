@@ -1006,7 +1006,6 @@ class ParallelTransformer(MegatronModule):
                 amax_history_len=self.fp8_amax_history_len,
                 amax_compute_algo=self.fp8_amax_compute_algo,
                 reduce_amax=reduce_amax,
-                override_linear_precision=(False, False, False),
             )
 
         self.is_first_microbatch = True

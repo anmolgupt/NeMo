@@ -15,6 +15,7 @@
 import itertools
 from typing import Any, List, Optional, Union
 
+import os
 import numpy as np
 import torch
 from omegaconf.dictconfig import DictConfig
@@ -572,12 +573,25 @@ class MegatronGPTModel(MegatronBaseModel, TextGeneration):
                     # Intermediate pipeline stage doesn't need any inputs
                     batch = {k: None for k in ['tokens', 'position_ids', 'attention_mask', 'labels']}
 
-            bf16_fprop_step_limit = 5
-            if not validation_step and global_train_steps < bf16_fprop_step_limit:
+            bf16_fprop_step_limit = int(os.getenv("NV_NEMO_TE_BF16_FPROP_STEPS", "-1"))
+            bf16_fprop_step_interval = int(os.getenv("NV_NEMO_TE_BF16_FPROP_INTERVAL", "-1"))
+            if bf16_fprop_step_limit > -1 and global_train_steps < bf16_fprop_step_limit:
                 use_te_bf16_fprop = True
             else:
                 use_te_bf16_fprop = False
-            logging.info(f'Use bf16 fprop: global_train_steps: {global_train_steps}, use_te_bf16_fprop: {use_te_bf16_fprop}, limit_steps: {bf16_fprop_step_limit}')
+
+            if bf16_fprop_step_interval > 0 and (global_train_steps % bf16_fprop_step_interval == 0):
+                use_te_bf16_fprop = True
+            else:
+                use_te_bf16_fprop = False
+
+            if validation_step:
+                if int(os.getenv("NV_NEMO_TE_BF16_FPROP_VAL", "0")):
+                    use_te_bf16_fprop = True
+                else:
+                    use_te_bf16_fprop = False
+
+            #logging.info(f'Use bf16 fprop: global_train_steps: {global_train_steps}, use_te_bf16_fprop: {use_te_bf16_fprop}, limit_steps: {bf16_fprop_step_limit}, interval: {bf16_fprop_step_interval}, validation_step: {validation_step}')
             output_tensor = model(
                 batch['tokens'],
                 batch['position_ids'],
