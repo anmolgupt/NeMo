@@ -168,6 +168,7 @@ class ParallelLinearAdapter(nn.Module, AdapterModuleUtil):
             model_parallel_config = ModelParallelConfig()
         self._sequence_parallel = model_parallel_config.sequence_parallel
         model_parallel_config.sequence_parallel = False  # SP is irrelevant for the lora linear layer
+
         if input_is_parallel:
             self.linear_in = RowParallelLinear(
                 in_features,
