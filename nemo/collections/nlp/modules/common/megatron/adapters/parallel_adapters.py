@@ -35,7 +35,7 @@ from nemo.collections.nlp.modules.common.megatron.utils import (
 )
 from nemo.core.classes.mixins import adapter_mixin_strategies
 from nemo.core.classes.mixins.adapter_mixins import AdapterConfig
-
+import os
 try:
     from apex.normalization.fused_layer_norm import MixedFusedLayerNorm
 
@@ -51,6 +51,10 @@ try:
     from megatron.core.tensor_parallel.mappings import (
         gather_from_sequence_parallel_region,
         scatter_to_sequence_parallel_region,
+    )
+    from megatron.core.parallel_state import (
+        get_tensor_model_parallel_group,
+        get_tensor_model_parallel_world_size,
     )
 
     HAVE_MEGATRON_CORE = True
@@ -202,12 +206,21 @@ class ParallelLinearAdapter(nn.Module, AdapterModuleUtil):
         else:
             # (@adithyare) we use this option to mirror the behavior a column parallel layer with two low-rank column parallel layers
             # if the original column parallel layer uses gather_output=False, then we will use the self.liner_out layer defined below.
+            if input_is_parallel:
+                if self._sequence_parallel and bool(int(os.getenv("USE_ALL2ALL", "0"))):
+                    lin_out_gather_output = False
+                else:
+                    lin_out_gather_output = True
+            else:
+                lin_out_gather_output = False
+
+               
             self.linear_out = ColumnParallelLinear(
                 dim,
                 out_features,
                 config=model_parallel_config,
                 bias=False,
-                gather_output=True if input_is_parallel else False,
+                gather_output=lin_out_gather_output,
                 init_method=self._get_init_fn(row_init_method),
             )
 
@@ -290,7 +303,16 @@ class ParallelLinearAdapter(nn.Module, AdapterModuleUtil):
             # layernorm after lora is impacted by sequence parallel,
             # hence seq dim need to be scattered right after lora linear layers
             # this function also handles the backward pass correctly
-            x = scatter_to_sequence_parallel_region(x)
+            if bool(int(os.getenv("USE_ALL2ALL", "0"))):
+                # all2all hidden_size / tp to sequence / tp
+                world_size = get_tensor_model_parallel_world_size()
+                group=get_tensor_model_parallel_group()
+                chunks_to_send = list(x.chunk(world_size, dim=0))
+                chunks_to_receive = [torch.empty_like(chunks_to_send[0]) for _ in range(world_size)]
+                torch.distributed.all_to_all(chunks_to_receive, chunks_to_send, group=group)
+                x = torch.cat(chunks_to_receive, dim=-1)
+            else:
+                x = scatter_to_sequence_parallel_region(x)
 
         if self.norm_position == 'post':
             x = self.layer_norm(x)
