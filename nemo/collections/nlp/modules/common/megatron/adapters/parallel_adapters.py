@@ -308,6 +308,7 @@ class ParallelLinearAdapter(nn.Module, AdapterModuleUtil):
                 world_size = get_tensor_model_parallel_world_size()
                 group=get_tensor_model_parallel_group()
                 chunks_to_send = list(x.chunk(world_size, dim=0))
+                chunks_to_send = [tensor.contiguous() for tensor in chunks_to_send]
                 chunks_to_receive = [torch.empty_like(chunks_to_send[0]) for _ in range(world_size)]
                 torch.distributed.all_to_all(chunks_to_receive, chunks_to_send, group=group)
                 x = torch.cat(chunks_to_receive, dim=-1)
